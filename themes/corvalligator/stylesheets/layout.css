@@ -8,7 +8,7 @@ body {
 #global_header {
   background: #FF8C00;
   position: relative;
-  height: 95px;
+  height: 110px;
 }
 
 #global_header a {
@@ -32,14 +32,14 @@ body {
 }
 
 #project_title {
-  #background: url('/images/head_calagator.gif') no-repeat;
-  height: 31px;
+  background: url('/images/corvalligator.png') no-repeat;
+  height: 60px;
   left: 40px;
   overflow: hidden;
   position: absolute;
   text-indent: -999px;
   top: 25px;
-  width: 135px;
+  width: 313px;
 }
 
 #app_menu ul {

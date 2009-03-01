@@ -16,3 +16,6 @@ venues_google_map_options:
   zoom: 12
   # Center of the map, in latitude and longitude:
   center: [44.570191, -123.275127]
+
+# Google Analytics ID
+google_analytics: 'UA-7186407-3'

@@ -6,14 +6,14 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title><%= cleanse(@page_title ? "#{@page_title} &raquo; " : "") %><%= SETTINGS.name %>: <%= SETTINGS.tagline %></title>
 
+    <!-- Stylesheets, inserted  -->
+    <%= yield :css_insert %>
+
     <!-- Stylesheets, static -->
     <%= theme_stylesheet_link_tag 'reset', :media => :all %>
     <%= stylesheet_link_tag 'common', :media => :all %>
-    <%= theme_stylesheet_link_tag 'typography', 'forms', 'layout', :media => :all, :cache => true %>
+    <%= theme_stylesheet_link_tag 'typography', 'forms', 'layout', 'datepicker.css', :media => :all, :cache => true %>
     <%= theme_stylesheet_link_tag 'print', :media => :print %>
-
-    <!-- Stylesheets, inserted  -->
-    <%= yield :css_insert %>
 
     <!-- JavaScripts, static -->
     <%= javascript_include_tag  'jquery.min.js',
@@ -80,7 +80,7 @@
       <%= yield %>
     </div>
 
-    <div id="top_footer">
+    <div id="bottom_footer">
       <%= URI.parse(SETTINGS.url).host %>
       <%= source_code_version %>
     </div>

@@ -1,0 +1,47 @@
+/* override from primary one */
+
+.datepicker_control {
+    background: #FF8C00
+}
+
+.datepicker_links {
+    background: #FFA500
+}
+
+.datepicker_header {
+    background: #FEEFE8
+}
+
+#datepicker_div, .datepicker_inline {
+    background: #FEEFE8
+}
+
+.datepicker_prompt {
+    background: #F7BB94
+}
+
+.datepicker {
+    background: #F7B594
+}
+
+.datepicker .datepicker_titleRow {
+    background: #EE7600
+}
+
+.datepicker_weekCol {
+    background: #DBA787
+}
+
+.datepicker .datepicker_weekEndCell {
+    background: #FFEECF
+}
+
+.datepicker_today {
+    background: #FF8C00
+}
+
+.datepicker_currentDay {
+    background: #FF8C00 !important;
+}
+
+

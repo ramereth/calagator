@@ -1,0 +1,18 @@
+# Site's name:
+name: 'Corvalligator'
+
+# Site's tagline:
+tagline: "Corvallis's Community Calendar"
+
+# Site's URL with trailing slash:
+url: 'http://corvalligator.org/'
+
+# Deault timezone, run "rake time:zones:all" for options:
+timezone: 'Pacific Time (US & Canada)'
+
+# Google map to display on /venues page:
+venues_google_map_options:
+  # Zoom magnification level:
+  zoom: 12
+  # Center of the map, in latitude and longitude:
+  center: [44.570191, -123.275127]

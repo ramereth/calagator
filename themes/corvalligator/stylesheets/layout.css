@@ -180,7 +180,7 @@ ul.event_list .day_of_week {
 
 
 .sidebar {
-  background: #e8fbfe;
+  background: #FEF5E8;
   padding: 2em 30px 1em 1em;
   position: absolute;
   top: 0;
@@ -259,7 +259,7 @@ ul.event_list .list_date {
 }
 
 .single_event .location.vcard {
-  background: #e8fbfe;
+  background: #FEF5E8;
   width: 45em;
   height: 16em;
   padding: 1em;
@@ -300,7 +300,7 @@ ul.event_list .list_date {
 ----------------------------------------*/
 
 .single_venue .location.vcard {
-  background: #e8fbfe;
+  background: #FEF5E8;
   width: 45em;
   height: 16em;
   padding: 1em;
@@ -380,7 +380,7 @@ fieldset .help {
 }
 
 #project_description {
-  background: #e8fbfe;
+  background: #FEF5E8;
   padding: 1em;
   width: 20em;
   margin: 0 2em 0 -1em;

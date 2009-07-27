@@ -6,7 +6,7 @@ body {
 }
 
 #global_header {
-  background: #FF8C00;
+  background: #3790DF;
   position: relative;
   height: 110px;
 }
@@ -32,14 +32,14 @@ body {
 }
 
 #project_title {
-  background: url('/images/corvalligator.png') no-repeat;
+  background: url('/images/corvalligator-white.png') no-repeat;
   height: 60px;
   left: 40px;
   overflow: hidden;
   position: absolute;
   text-indent: -999px;
   top: 25px;
-  width: 313px;
+  width: 256px;
 }
 
 #app_menu ul {
@@ -81,7 +81,7 @@ body {
 
 .subnav {
   font-size: 1.2em;
-  background: #FFA500;
+  background: #0060AF;
   padding-left: 40px;
   height: 2em;
   line-height: 2em;
@@ -98,7 +98,7 @@ body {
 }
 
 .subnav a {
-  color: #7F2711;
+  color: #FFFFFF;
   padding-bottom: .42em;
 }
 

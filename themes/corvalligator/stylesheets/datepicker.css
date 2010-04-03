@@ -1,0 +1,59 @@
+/* override from primary one */
+
+.datepicker_control {
+  background: #596036;
+}
+
+.datepicker_links {
+    background: #6a829a;
+}
+
+.datepicker_header {
+  background: #b2b5a1;
+}
+
+#datepicker_div, .datepicker_inline {
+  background: transparent url('/themes/corvalligator/images/white.png') repeat;
+}
+
+.datepicker_prompt {
+    background: #6a829a;
+}
+
+.datepicker {
+  background: transparent;
+}
+
+.datepicker .datepicker_titleRow {
+    background: #6a829a;
+}
+
+.datepicker_weekCol {
+    background: transparent;
+}
+
+.datepicker .datepicker_daysRow {
+    background: transparent url('/themes/corvalligator/images/white.png') repeat;
+}
+
+.datepicker .datepicker_daysCell {
+    background: #FFF;
+}
+
+.datepicker .datepicker_weekEndCell {
+    background: #b9c5d0;
+}
+
+.datepicker .datepicker_unselectable {
+  background: #b2b5a1;
+}
+
+.datepicker_today {
+    background: #6a829a;
+}
+
+.datepicker_currentDay {
+    background: #6a829a !important;
+}
+
+

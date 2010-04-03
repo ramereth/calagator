@@ -35,11 +35,11 @@ ActionController::Routing::Routes.draw do |map|
   map.connect 'hello', :controller => 'site', :action => 'hello'
   map.connect 'about', :controller => 'site', :action => 'about'
   
-  map.recent_changes 'recent_changes', :controller => 'site', :action => 'recent_changes'
-  map.formatted_recent_changes 'recent_changes.:format', :controller => 'site', :action => 'recent_changes'
+  map.recent_changes 'recent_changes.:format', :controller => 'changes', :action => 'show'
+  map.rollback_to 'recent_changes/rollback_to/:version', :controller => 'changes', :action => 'rollback_to', :conditions => { :method => :post }
 
   # Normal controllers
-  map.resources :events, :collection => {'duplicates' => :get, 'squash_multiple_duplicates' => :post, 'search' => :get}
+  map.resources :events, :collection => {'duplicates' => :get, 'squash_multiple_duplicates' => :post, 'search' => :get}, :member => {'clone' => :get}
   map.resources :sources, :collection => { :import => :put }
   map.resources :venues, :collection => {'duplicates' => :get, 'squash_multiple_duplicates' => :post}
 
@@ -54,7 +54,11 @@ ActionController::Routing::Routes.draw do |map|
   # Site root
   map.root :controller => "site"
 
-  # See how all your routes lay out with "rake routes"
+  # Manually added routes for theme_support since the routing included in the plugin doesn't seem to included at any point.
+  # vendor/plugins/theme_support/lib/patches/routeset_ex.rb
+  map.theme_images '/themes/:theme/images/*filename', :action => 'images', :controller => 'theme'
+  map.theme_stylesheets '/themes/:theme/stylesheets/*filename', :action => 'stylesheets', :controller => 'theme'
+  map.theme_javascript '/themes/:theme/javascript/*filename', :action => 'javascript', :controller => 'theme'
 
   # Install the default routes as the lowest priority.
   map.connect ':controller/:action/:id'

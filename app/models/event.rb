@@ -22,6 +22,8 @@
 class Event < ActiveRecord::Base
   Tag # this class uses tagging. referencing the Tag class ensures that has_many_polymorphs initializes correctly across reloads.
 
+  MIN_MULTIDAY_DURATION = 20.hours
+
   # Names of columns and methods to create Solr indexes for
   INDEXABLE_FIELDS = \
     %w(
@@ -41,7 +43,7 @@ class Event < ActiveRecord::Base
     acts_as_solr :fields => INDEXABLE_FIELDS
   end
   
-  acts_as_versioned
+  has_paper_trail
 
   # Associations
   belongs_to :venue
@@ -165,13 +167,13 @@ class Event < ActiveRecord::Base
     return self.venue
   end
 
-  # Returns groups of records for the overview screen.
+  # Returns groups of records for the site overview screen in the following format:
   #
-  # The data structure returned maps time names to arrays of event records:
   #   {
-  #     :today => [...],
-  #     :tomorrow => [...],
-  #     :later => [...],
+  #     :today => [...],    # Events happening today or empty array
+  #     :tomorrow => [...], # Events happening tomorrow or empty array
+  #     :later => [...],    # Events happening within two weeks or empty array
+  #     :more => ...,       # First event after the two week window or nil
   #   }
   def self.select_for_overview
     today = Time.today
@@ -183,9 +185,10 @@ class Event < ActiveRecord::Base
       :today    => [],
       :tomorrow => [],
       :later    => [],
+      :more     => nil,
     }
 
-    # find all events between today and future_cutoff, sorted by start_time
+    # Find all events between today and future_cutoff, sorted by start_time
     # includes events any part of which occurs on or after today through on or after future_cutoff
     overview_events = Event.find_by_dates(today.utc, future_cutoff, :order => :start_time)
     overview_events.each do |event|
@@ -198,6 +201,9 @@ class Event < ActiveRecord::Base
       end
     end
 
+    # Find next item beyond the future_cuttoff for use in making links to it:
+    times_to_events[:more] = Event.first(:conditions => ["start_time >= ?", future_cutoff], :order => 'start_time asc')
+
     return times_to_events
   end
 
@@ -207,7 +213,7 @@ class Event < ActiveRecord::Base
   #   see r1048 which has been reverted because it broke find_future_events
   END_OF_TIME = Time.local(2038, 01, 18).yesterday.end_of_day.utc
 
-# Returns an Array of non-duplicate future Event instances.
+  # Returns an Array of non-duplicate future Event instances.
   # where "future" means any part of an event occurs today or later
   # Options:
   # * :order => How to sort events. Defaults to :start_time.
@@ -311,6 +317,7 @@ class Event < ActiveRecord::Base
     formatted_query = \
       %{NOT duplicate_for_solr:"1" AND (} \
       << query \
+      .downcase \
       .gsub(/:/, '?') \
       .scan(/\S+/) \
       .map(&:escape_lucene) \
@@ -419,9 +426,10 @@ class Event < ActiveRecord::Base
     self.venue.ergo.title.to_s.downcase
   end
 
-  # Return a string of all indexable fields, which may be useful for doing duplicate checks
+  # Return a string containing the text of all the indexable fields joined together.
   def text_for_solr
-    INDEXABLE_FIELDS.reject{|name| name == :text_for_solr}.map{|name| self.send(name)}.join("|").to_s
+    # NOTE: The #text_for_solr method is one of the INDEXABLE_FIELDS, so don't indexing it to avoid an infinite loop. Some fields are methods, not database columns, so use #send rather than read_attribute.
+    (INDEXABLE_FIELDS - [:text_for_solr]).map{|name| self.send(name).to_s.downcase}.join("|").to_s
   end
 
   #---[ Transformations ]-------------------------------------------------
@@ -483,14 +491,29 @@ EOF
     for event in events
       next if event.start_time.nil?
       icalendar.add_event do |c|
-        c.dtstart       event.start_time
-        c.dtend         event.end_time || event.start_time+1.hour
+        if event.multiday?
+          c.dtstart     event.dates.first
+          c.dtend       event.dates.last + 1.day
+        else
+          c.dtstart     event.start_time
+          c.dtend       event.end_time || event.start_time + 1.hour
+        end
+
         c.summary       event.title || 'Untitled Event'
         c.created       event.created_at if event.created_at
         c.lastmod       event.updated_at if event.updated_at
 
-        description   = event.description || ""
-        description  += "\n\nTags:\n#{event.tag_list}" unless event.tag_list.blank?
+        description = returning String.new do |d|
+
+          if event.multiday?
+            d << "This event runs from #{TimeRange.new(event.start_time, event.end_time, :format => :text).to_s}."
+            d << "\n\n Description:\n"
+          end
+
+          d << Hpricot(event.description).to_plain_text unless event.description.blank?
+          d << "\n\nTags:\n#{event.tag_list}" unless event.tag_list.blank?
+
+        end
 
         c.description   description unless description.blank?
 
@@ -506,7 +529,7 @@ EOF
         # Outlook 2003 will not import an .ics file unless it has DTSTAMP, UID, and METHOD
         # use created_at for DTSTAMP; if there's no created_at, use event.start_time;
         c.dtstamp       event.created_at || event.start_time
-        c.uid           opts[:url_helper].call(event) if opts[:url_helper]
+        c.uid           "#{opts[:url_helper].call(event)}" if opts[:url_helper]
 
         # TODO Figure out how to encode a venue. Remember that Vpim can't handle Vvenue itself and our parser had to
         # go through many hoops to extract venues from the source data. Also note that the Vevent builder here doesn't
@@ -531,7 +554,56 @@ EOF
     end
   end
 
+  # Array of attributes that should be cloned by #to_clone.
+  CLONE_ATTRIBUTES = [:title, :description, :venue_id, :url, :tag_list]
+
+  # Return a new record with fields selectively copied from the original, and
+  # the start_time and end_time adjusted so that their date is set to today and
+  # their time-of-day is set to the original record's time-of-day.
+  def to_clone
+    clone = self.class.new
+    for attribute in CLONE_ATTRIBUTES
+      clone.send("#{attribute}=", self.send(attribute))
+    end
+    if self.start_time
+      clone.start_time = self.class._clone_time_for_today(self.start_time)
+    end
+    if self.end_time
+      clone.end_time = self.class._clone_time_for_today(self.end_time)
+    end
+    return clone
+  end
+
+  # Return a time that's today but has the time-of-day component from the
+  # +source+ time argument.
+  def self._clone_time_for_today(source)
+    today = Time.today
+    return Time.local(today.year, today.mon, today.day, source.hour, source.min, source.sec, source.usec)
+  end
+
   #---[ Date related ]----------------------------------------------------
+
+  # Returns a range of time spanned by the event.
+  def time_range
+    if self.start_time && self.end_time
+      self.start_time..self.end_time
+    elsif self.start_time
+      self.start_time..(self.start_time + 1.hour)
+    else
+      raise ArgumentError, "can't get a time range for an event with no start time"
+    end
+  end
+
+  # Returns an array of the dates spanned by the event.
+  def dates
+    if self.start_time && self.end_time
+      return (self.start_time.to_date..self.end_time.to_date).to_a
+    elsif self.start_time
+      return [self.start_time.to_date]
+    else
+      raise ArgumentError, "can't get dates for an event with no start time"
+    end
+  end
 
   # Is this event current? Default cutoff is today
   def current?(cutoff=nil)
@@ -548,6 +620,18 @@ EOF
   # Did this event start before today but ends today or later?
   def ongoing?
     self.start_time < Time.today && self.end_time && self.end_time >= Time.today
+  end
+
+  def multiday?
+    ( self.dates.size > 1 ) && ( self.duration.seconds > MIN_MULTIDAY_DURATION )
+  end
+
+  def duration
+    if self.end_time && self.start_time
+      return (self.end_time - self.start_time)
+    else
+      return 0
+    end
   end
 
 protected

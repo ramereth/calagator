@@ -15,17 +15,18 @@ describe EventsController, "when displaying index" do
     it "should produce XML" do
       post :index, :format => "xml"
 
-      struct = XmlSimple.xml_in_string(response.body)
-      struct["event"].should be_a_kind_of(Array)
+      hash = Hash.from_xml(response.body)
+      hash["events"].should be_a_kind_of(Array)
     end
 
     it "should include venue details" do
       post :index, :format => "xml"
 
-      struct = XmlSimple.xml_in_string(response.body)
-      event = struct["event"].first
-      venue = event["venue"].first
-      venue_title = venue["title"].first  # Why XML? Why?
+      hash = Hash.from_xml(response.body)
+
+      event = hash["events"].first
+      venue = event["venue"]
+      venue_title = venue["title"]  # Why XML? Why?
       venue_title.should be_a_kind_of(String)
       venue_title.length.should > 0
     end
@@ -61,8 +62,8 @@ describe EventsController, "when displaying index" do
   it "should produce ATOM" do
     post :index, :format => "atom"
 
-    struct = XmlSimple.xml_in_string(response.body)
-    struct["entry"].should be_a_kind_of(Array)
+    hash = Hash.from_xml(response.body)
+    hash["feed"]["entry"].should be_a_kind_of(Array)
   end
 
   describe "in ICS format" do
@@ -110,6 +111,8 @@ describe EventsController, "when displaying events" do
 end
 
 describe EventsController, "when creating or updating events" do
+  fixtures :events, :venues
+
   before(:each) do
     # Fields marked with "###" may be filled in by examples to alter behavior
     @params = {
@@ -212,6 +215,17 @@ describe EventsController, "when creating or updating events" do
       post "create", :trap_field => "I AM AN EVIL ROBOT, I EAT OLD PEOPLE'S MEDICINE FOR FOOD!"
       response.should render_template(:new)
       flash[:failure].should match(/evil robot/i)
+    end
+    
+    it "should allow the user to preview the event" do
+      event = Event.new(:title => "Awesomeness")
+      Event.should_receive(:new).and_return(event)
+
+      event.should_not_receive(:save)
+      
+      post "create", :event => { :title => "Awesomeness" }, :start_time => Time.now, :start_date => Date.today, :preview => "Preview"
+      response.should render_template(:new)
+      event.should be_valid
     end
   end
 
@@ -316,6 +330,40 @@ describe EventsController, "when creating or updating events" do
       flash[:failure].should match(/evil robot/i)
     end
 
+    it "should allow the user to preview the event" do
+      Event.should_receive(:find).and_return(@event)
+      @event.should_not_receive(:update_attributes)
+      @event.should_receive(:attributes=)
+      @event.should_receive(:valid?).and_return(true)
+
+      put "update", @params.merge(:preview => "Preview")
+      response.should render_template(:edit)
+    end
+
+  end
+
+  describe "when cloning event" do
+    fixtures :events, :venues
+    before(:each) do
+      @event = events(:calagator_codesprint)
+      Event.stub!(:find).and_return(@event)
+      get "clone", :id => 1
+    end
+
+    it "should use the cloned object" do
+      record = assigns[:event]
+      record.should be_a_new_record
+      record.id.should be_nil
+    end
+
+    it "should display a new event form" do
+      response.should be_success
+      response.should render_template(:new)
+    end
+
+    it "should have notice with cloning instructions" do
+      flash[:success].should =~ /clone/i
+    end
   end
 end
 
@@ -419,17 +467,17 @@ describe EventsController, "when searching" do
       it "should produce XML" do
         post :search, :query => "myquery", :format => "xml"
 
-        struct = XmlSimple.xml_in_string(response.body)
-        struct["event"].should be_a_kind_of(Array)
+        hash = Hash.from_xml(response.body)
+        hash["events"].should be_a_kind_of(Array)
       end
 
       it "should include venue details" do
         post :search, :query => "myquery", :format => "xml"
 
-        struct = XmlSimple.xml_in_string(response.body)
-        event = struct["event"].first
-        venue = event["venue"].first
-        venue_title = venue["title"].first  # Why XML? Why?
+        hash = Hash.from_xml(response.body)
+        event = hash["events"].first
+        venue = event["venue"]
+        venue_title = venue["title"]
         venue_title.should be_a_kind_of(String)
         venue_title.length.should > 0
       end
@@ -465,8 +513,8 @@ describe EventsController, "when searching" do
     it "should produce ATOM" do
       post :search, :query => "myquery", :format => "atom"
 
-      struct = XmlSimple.xml_in_string(response.body)
-      struct["entry"].should be_a_kind_of(Array)
+      hash = Hash.from_xml(response.body)
+      hash["feed"]["entry"].should be_a_kind_of(Array)
     end
 
     describe "in ICS format" do

@@ -89,7 +89,6 @@ class ActiveRecord::Base #:nodoc:
         when Array
           obj.map! do |item|
             case item
-              when /^\d+$/, Fixnum then Tag.find(item).name # This will be slow if you use ids a lot.
               when Tag then item.name
               when String then item
               else
@@ -134,7 +133,8 @@ class ActiveRecord::Base #:nodoc:
       sql  = "SELECT #{(scope && scope[:select]) || options[:select]} "
       sql << "FROM #{(scope && scope[:from]) || options[:from]} "
 
-      add_joins!(sql, options, scope)
+      # FIXME What did this #add_joins method do that was useful? It throws an exception under Ruby on Rails 2.3.x and seems to serve no purpose.
+      #IK# add_joins!(sql, options, scope)
       
       sql << "WHERE #{table_name}.#{primary_key} = taggings.taggable_id "
       sql << "AND taggings.taggable_type = '#{ActiveRecord::Base.send(:class_name_of_active_record_descendant, self).to_s}' "

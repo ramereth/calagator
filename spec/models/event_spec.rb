@@ -1,6 +1,13 @@
 require File.dirname(__FILE__) + '/../spec_helper'
 
 describe Event do
+  def valid_event_attributes
+    {
+      :start_time => Time.now,
+      :title => "A newfangled event"
+    }
+  end
+
   before(:each) do
     @event = Event.new
   end
@@ -33,6 +40,17 @@ describe Event do
       events(:ongoing_event).should be_ongoing
     end
 
+    it "should be considered a multi-day event if it spans multiple days" do
+      events(:ongoing_event).should be_multiday
+    end
+
+    it "should be considered a multi-day event if it crosses a day boundry and is longer than the minimum duration (#{Event::MIN_MULTIDAY_DURATION.inspect})" do
+      Event.new(:start_time => Date.today - 1.second, :end_time => Date.today + Event::MIN_MULTIDAY_DURATION).should be_multiday
+    end
+
+    it "should not be considered a multi-day event if it crosses a day boundry, but is not longer than the minimum duration (#{Event::MIN_MULTIDAY_DURATION.inspect})" do
+      Event.new(:start_time => Date.today - 1.second, :end_time => Date.today - 1.second + Event::MIN_MULTIDAY_DURATION).should_not be_multiday
+    end
   end
 
   describe "dealing with tags" do
@@ -79,6 +97,14 @@ describe Event do
       @event.tags.map(&:name).should == tags
     end
 
+    it "should not interpret numeric tags as IDs" do
+      tag = "123"
+      @event.tag_list = tag
+      @event.save
+
+      @event.reload
+      @event.tags.first.name.should == "123"
+    end
   end
 
   describe "when parsing" do
@@ -284,6 +310,22 @@ describe Event do
       describe "events tomorrow" do
         it "should not include events that start after tomorrow" do
           @overview[:tomorrow].should_not include(@starts_after_tomorrow)
+        end
+      end
+
+      describe "determining if we should show the more link" do
+        it "should provide :more item if there are events past the future cutoff" do
+          event = stub_model(Event)
+          Event.should_receive(:first).with(:order=>"start_time asc", :conditions => ["start_time >= ?", Time.today + 2.weeks]).and_return(event)
+
+          Event.select_for_overview[:more].should == event
+        end
+
+        it "should set :more item if there are no events past the future cutoff" do
+          event = stub_model(Event)
+          Event.should_receive(:first).with(:order=>"start_time asc", :conditions => ["start_time >= ?", Time.today + 2.weeks]).and_return(event)
+
+          Event.select_for_overview[:more?].should be_blank
         end
       end
     end
@@ -600,23 +642,23 @@ describe Event do
       @slave2 = Event.create!(:title => "2nd slave", :start_time => @today, :duplicate_of_id => @slave1.id)
       @orphan = Event.create!(:title => "orphan",    :start_time => @today, :duplicate_of_id => 999999)
     end
-    
+
     it "should recognize a master" do
       @master.should be_a_master
     end
-    
+
     it "should recognize a slave" do
       @slave1.should be_a_slave
     end
-    
+
     it "should not think that a slave is a master" do
       @slave2.should_not be_a_master
     end
-    
+
     it "should not think that a master is a slave" do
       @master.should_not be_a_slave
     end
-    
+
     it "should return the progenitor of a child" do
       @slave1.progenitor.should == @master
     end
@@ -624,15 +666,15 @@ describe Event do
     it "should return the progenitor of a grandchild" do
       @slave2.progenitor.should == @master
     end
-    
+
     it "should return a master as its own progenitor" do
       @master.progenitor.should == @master
     end
-    
+
     it "should return a marked duplicate as progenitor if it is orphaned"  do
       @orphan.progenitor.should == @orphan
     end
-    
+
     it "should return the progenitor if an imported event has an exact duplicate" do
       @abstract_event = SourceParser::AbstractEvent.new
       @abstract_event.title = @slave2.title
@@ -643,18 +685,18 @@ describe Event do
 
   end
 
-  describe "acting as versioned" do
+  describe "when versioning" do
     it "should have versions" do
-      Event.new.versions.should==[]
+      Event.new.versions.should == []
     end
-    
-    it "should increment the version number when editing" do
+
+    it "should create a new version after updating" do
       event = Event.create!(:title => "Event title", :start_time => Time.parse('2008.04.12'))
-      event.version.should==1
-      
+      event.versions.count.should == 1
+
       event.title = "New Title"
       event.save!
-      event.version.should==2
+      event.versions.count.should == 2
     end
   end
 
@@ -679,4 +721,110 @@ describe Event do
     end
   end
 
+  describe "when cloning" do
+    fixtures :events, :venues
+
+    before(:each) do
+      @original = events(:calagator_codesprint)
+      @original.start_time = Time.parse("2008-01-19 10:00 PST")
+      @original.end_time = Time.parse("2008-01-19 17:00 PST")
+      @clone = @original.to_clone
+    end
+
+    it "should be a new record" do
+      @clone.should be_a_new_record
+    end
+
+    it "should not have an id" do
+      @clone.id.should be_nil
+    end
+
+    it "should set start and end time to original time of day for today" do
+      @clone.start_time.should == Time.today + 10.hours
+      @clone.end_time.should   == Time.today + 17.hours
+    end
+
+    it "should duplicate title, description, venue, url and tag_list" do
+      @clone.title.should       == @original.title
+      @clone.description.should == @original.description
+      @clone.url.should         == @original.url
+      @clone.venue.should       == @original.venue
+      @clone.tag_list.should    == @original.tag_list
+    end
+  end
+
+  describe "when converting to iCal" do
+    fixtures :events
+
+    def ical_roundtrip(events, opts = {})
+      parsed_events = Vpim::Icalendar.decode( Event.to_ical(events, opts) ).first.events
+      if events.is_a?(Event)
+        parsed_events.first
+      else
+        parsed_events
+      end
+    end
+
+    it "should produce parsable iCal output" do
+      lambda { ical_roundtrip( events(:tomorrow) ) }.should_not raise_error
+    end
+
+    it "should represent an event without an end time as a 1-hour block" do
+      ical_roundtrip( events(:tomorrow) ).duration.should == 1.hours
+    end
+
+    it "should set the appropriate end time if one is given" do
+      event = Event.new(valid_event_attributes)
+      event.end_time = event.start_time + 2.hours
+
+      ical_roundtrip( event ).duration.should == 2.hours
+    end
+
+    { :summary => :title,
+      :created => :created_at,
+      :lastmod => :updated_at,
+      :description => :description,
+      :url => :url,
+      :dtstart => :start_time,
+      :dtstamp => :created_at
+    }.each do |ical_attribute, model_attribute|
+      it "should map the Event's #{model_attribute} attribute to '#{ical_attribute}' in the iCalendar output" do
+        events(:tomorrow).send(model_attribute).should == ical_roundtrip( events(:tomorrow) ).send(ical_attribute)
+      end
+    end
+
+    it "should call the URL helper to generate a UID" do
+      ical_roundtrip( Event.new(valid_event_attributes), :url_helper => lambda {|e| "UID'D!" }).uid.should == "UID'D!"
+    end
+
+    it "should strip HTML from the description" do
+      ical_roundtrip(
+        Event.new(valid_event_attributes.merge( :description => "<blink>OMFG HTML IS TEH AWESOME</blink>") )
+      ).description.should_not include "<blink>"
+    end
+
+    it "should include tags in the description" do
+      event = events(:tomorrow)
+      event.tag_list = "tags, folksonomy, categorization"
+      ical_roundtrip(event).description.should include event.tag_list
+    end
+
+    it "should use the event's URL on Calagator if no URL is provided (and a url helper is given)" do
+      ical_roundtrip( Event.create( valid_event_attributes ), :url_helper => lambda{|e| "FAKE"} ).url.should == "FAKE"
+    end
+
+    it "should create multi-day entries for multi-day events" do
+      event = Event.create( valid_event_attributes.merge(:end_time => valid_event_attributes[:start_time] + 4.days) )
+      parsed_event = ical_roundtrip( event )
+
+      # UTC is used here because we're currently outputting _all_ iCalendar times as UTC.
+      # We really need to make it so that isn't happening.
+      #
+      # FIXME: Time zone data should be included in iCalendar output. Really.
+
+      start_time = Time.today.utc + Time.today.gmtoff
+      parsed_event.dtstart.should == start_time
+      parsed_event.dtend.should == start_time + 5.days
+    end
+  end
 end

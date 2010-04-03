@@ -101,7 +101,7 @@ class EventsController < ApplicationController
     end
 
     respond_to do |format|
-      if !evil_robot && @event.save
+      if !evil_robot && params[:preview].nil? && @event.save
         flash[:success] = 'Your event was successfully created. '
         format.html {
           if has_new_venue && !params[:venue_name].blank?
@@ -113,6 +113,7 @@ class EventsController < ApplicationController
         }
         format.xml  { render :xml => @event, :status => :created, :location => @event }
       else
+        @event.valid? if params[:preview]
         format.html { render :action => "new" }
         format.xml  { render :xml => @event.errors, :status => :unprocessable_entity }
       end
@@ -134,7 +135,7 @@ class EventsController < ApplicationController
     end
 
     respond_to do |format|
-      if !evil_robot && @event.update_attributes(params[:event])
+      if !evil_robot && params[:preview].nil? && @event.update_attributes(params[:event])
         flash[:success] = 'Event was successfully updated.'
         format.html {
           if has_new_venue && !params[:venue_name].blank?
@@ -146,6 +147,10 @@ class EventsController < ApplicationController
         }
         format.xml  { head :ok }
       else
+        if params[:preview]
+          @event.attributes = params[:event]
+          @event.valid?
+        end
         format.html { render :action => "edit" }
         format.xml  { render :xml => @event.errors, :status => :unprocessable_entity }
       end
@@ -226,9 +231,27 @@ class EventsController < ApplicationController
   end
 
   def refresh_version
-    @event = Event.find(params[:id])
-    @event.revert_to(params[:version])
+    @event = \
+      if params[:version] == '-1'
+        Event.find(params[:id])
+      else
+        Version.find(params[:version]).reify
+      end
     render :partial => 'form', :locals => { :event => @event}
+  end
+
+  # Display a new event form pre-filled with the contents of an existing record.
+  def clone
+    @event = Event.find(params[:id]).to_clone
+    @page_title = "Clone an existing Event"
+
+    respond_to do |format|
+      format.html {
+        flash[:success] = "This is a new event cloned from an existing one. Please update the fields, like the time and description."
+        render "new.html.erb"
+      }
+      format.xml  { render :xml => @event }
+    end
   end
 
 protected

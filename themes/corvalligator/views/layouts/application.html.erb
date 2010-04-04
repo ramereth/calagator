@@ -53,9 +53,9 @@
           </ul>
         </div>
         <div id='project_menu'>
-          <strong>Get Involved:</strong> <%= link_to "Forum", "http://groups.google.com/group/corvalligator/" %> | <%= link_to "Code", "http://github.com/ramereth/calagator/tree/corvalligator" %>
+          <strong>Get Involved:</strong> <%= link_to "Twitter", "http://twitter.com/corvalligator" %> | <%= link_to "Facebook", 'http://www.facebook.com/pages/Corvalligator/109748929047778' %> | <%= link_to "Forum", "http://groups.google.com/group/corvalligator/" %> | <%= link_to "Code", "http://github.com/ramereth/calagator/tree/corvalligator" %> <!--| <%= link_to "File an Issue", "http://github.com/ramereth/calagator/issues" %>-->
           <br />
-          <!--<strong>Something not right?</strong> <%= link_to "File an issue", "http://code.google.com/p/calagator/issues/list" %> or <%= link_to "get satisfaction", 'http://getsatisfaction.com/calagator' %>.-->
+          <strong>Popular Tags:</strong> <%= link_to "Music", "http://corvalligator.org/events/search?order=date&query=music" %> | <%= link_to "Tech", "http://corvalligator.org/events/search?order=date&query=tech" %> | <%= link_to "OSU", "http://corvalligator.org/events/search?order=date&query=osu" %> | <%= link_to "Business", "http://corvalligator.org/events/search?order=date&query=business" %>
         </div>
         <% form_tag '/events/search', :method => :get do %>
           <div id='search_form'>

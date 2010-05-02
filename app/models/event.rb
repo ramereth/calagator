@@ -22,6 +22,10 @@
 class Event < ActiveRecord::Base
   Tag # this class uses tagging. referencing the Tag class ensures that has_many_polymorphs initializes correctly across reloads.
 
+  # Treat any event with a duration of at least this many hours as a multiday
+  # event. This constant is used by the #multiday? method and is primarily
+  # meant to make iCalendar exports display this event as covering a range of
+  # days, rather than hours.
   MIN_MULTIDAY_DURATION = 20.hours
 
   # Names of columns and methods to create Solr indexes for
@@ -506,6 +510,13 @@ EOF
           
           entry.created       item.created_at if item.created_at
           entry.last_modified item.updated_at if item.updated_at
+
+          # Set the iCalendar SEQUENCE, which should be increased each time an
+          # event is updated. If an admin needs to forcefully increment the
+          # SEQUENCE for all events, they can edit the "config/secrets.yml"
+          # file and set the "icalendar_sequence_offset" value to something
+          # greater than 0.
+          entry.sequence((SECRETS.icalendar_sequence_offset || 0) + item.versions.count)
           
           if item.multiday?
             entry.dtstart item.dates.first

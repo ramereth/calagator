@@ -30,18 +30,17 @@ class Event < ActiveRecord::Base
 
   # Names of columns and methods to create Solr indexes for
   INDEXABLE_FIELDS = \
-    %w(
-      title
-      description
+    %w[
       url
       duplicate_for_solr
       start_time_for_solr
       end_time_for_solr
       event_title_for_solr
       venue_title_for_solr
+      description_for_solr
+      tag_list_for_solr
       text_for_solr
-      tag_list
-    ).map(&:to_sym)
+    ].map(&:to_sym)
 
   unless RAILS_ENV == 'test'
     acts_as_solr :fields => INDEXABLE_FIELDS
@@ -273,6 +272,31 @@ class Event < ActiveRecord::Base
     end
   end
 
+  #---[ Sort labels ]-------------------------------------------
+
+  # Labels displayed for sorting options:
+  SORTING_LABELS = {
+    'name'  => 'Event Name',
+    'venue' => 'Location',
+    'score' => 'Relevance',
+    'date'  => 'Date'
+  }
+
+  # Return the label for the +sorting_key+ (e.g. 'score'). Optionally set the
+  # +is_searching_by_tag+, to constrain options available for tag searches.
+  def self.sorting_label_for(sorting_key=nil, is_searching_by_tag=false)
+    if SORTING_LABELS.has_key?(sorting_key)
+      SORTING_LABELS[sorting_key]
+    elsif sorting_key.present?
+      # TODO Should we only show labels for known keys?
+      sorting_key
+    elsif is_searching_by_tag
+      SORTING_LABELS['date']
+    else
+      SORTING_LABELS['score']
+    end
+  end
+
   #---[ Solr searching ]--------------------------------------------------
 
   # Number of records to index at once.
@@ -319,24 +343,25 @@ class Event < ActiveRecord::Base
     order = opts[:order].ergo.to_sym || DEFAULT_SEARCH_ORDER
 
     formatted_query = \
-      %{NOT duplicate_for_solr:"1" AND (} \
-      << query \
-      .downcase \
-      .gsub(/:/, '?') \
-      .scan(/\S+/) \
-      .map(&:escape_lucene) \
-      .map{|term| %{
-        title:"#{term}"~#{SOLR_SIMILARITY}^#{SOLR_TITLE_BOOST}
-        OR tag:"#{term}"~#{SOLR_SIMILARITY}^#{SOLR_TITLE_BOOST}
-        OR "#{term}"~#{SOLR_SIMILARITY}}
-      } \
-      .join(' ') \
-      .gsub(/^\s{2,}|\s{2,}$|\s{2,}/m, ' ') \
-      << ')'
+      'NOT duplicate_for_solr:"1" AND (' \
+      << query.downcase.gsub(/:/, '?').scan(/\S+/).map(&:escape_lucene).map{|term|
+          <<-HERE
+            event_title_for_solr:#{term}^#{SOLR_TITLE_BOOST}
+              OR event_title_for_solr:#{term}~#{SOLR_SIMILARITY}^#{SOLR_TITLE_BOOST}
+            OR tag_list_for_solr:#{term}^#{SOLR_TITLE_BOOST}
+              OR tag_list_for_solr:#{term}~#{SOLR_SIMILARITY}^#{SOLR_TITLE_BOOST}
+            OR title:#{term}^#{SOLR_TITLE_BOOST}
+              OR title:#{term}~#{SOLR_SIMILARITY}^#{SOLR_TITLE_BOOST}
+            OR #{term}~#{SOLR_SIMILARITY}
+              OR #{term}
+          HERE
+        }.map(&:strip).join(' ').gsub(/\s{2,}/m, ' ') << ')'
 
     if skip_old
-      formatted_query << %{ AND (start_time_for_solr:[#{Time.today.yesterday.strftime(SOLR_TIME_FORMAT)} TO #{SOLR_TIME_MAXIMUM}])}
+      formatted_query << " AND (start_time_for_solr:[#{Time.today.yesterday.strftime(SOLR_TIME_FORMAT)} TO #{SOLR_TIME_MAXIMUM}])"
     end
+
+    logger.info("Event::search, formatted_query: #{formatted_query}")
 
     solr_opts = {
       :order => "score desc",
@@ -368,6 +393,16 @@ class Event < ActiveRecord::Base
   # Options:
   # * :current => Limit results to only current events? Defaults to false.
   def self.search_tag_grouped_by_currentness(tag, opts={})
+    case opts[:order]
+      when 'name', 'title'
+        opts[:order] = 'events.title'
+      when 'date'
+        opts[:order] = 'events.start_time'
+      when 'venue'
+        opts[:order] = 'venues.title'
+        opts[:include] = :venue
+    end
+
     result = self.group_by_currentness(self.tagged_with(tag, opts))
     # TODO Avoid searching for :past results. Currently finding them and discarding them when not wanted.
     result[:past] = [] if opts[:current]
@@ -423,17 +458,29 @@ class Event < ActiveRecord::Base
   end
 
   def event_title_for_solr
-    self.title.to_s.downcase
+    self.class.sanitize_for_solr(self.title)
   end
 
   def venue_title_for_solr
-    self.venue.ergo.title.to_s.downcase
+    self.class.sanitize_for_solr(self.venue.ergo.title)
+  end
+
+  def tag_list_for_solr
+    self.class.sanitize_for_solr(self.tag_list)
+  end
+
+  def description_for_solr
+    self.class.sanitize_for_solr(self.description)
   end
 
   # Return a string containing the text of all the indexable fields joined together.
   def text_for_solr
     # NOTE: The #text_for_solr method is one of the INDEXABLE_FIELDS, so don't indexing it to avoid an infinite loop. Some fields are methods, not database columns, so use #send rather than read_attribute.
-    (INDEXABLE_FIELDS - [:text_for_solr]).map{|name| self.send(name).to_s.downcase}.join("|").to_s
+    (INDEXABLE_FIELDS - [:text_for_solr]).map{|name| self.class.sanitize_for_solr(self.send(name))}.join("|").to_s
+  end
+
+  def self.sanitize_for_solr(text)
+    return text.to_s.downcase.gsub(/[^[:alnum:]]/, ' ').gsub(/\s{2,}/, ' ')
   end
 
   #---[ Transformations ]-------------------------------------------------
@@ -449,6 +496,7 @@ class Event < ActiveRecord::Base
     event.end_time     = abstract_event.end_time.blank? ? nil : Time.parse(abstract_event.end_time.to_s)
     event.url          = abstract_event.url
     event.venue        = Venue.from_abstract_location(abstract_event.location, source) if abstract_event.location
+    event.tag_list     = abstract_event.tags.join(',')
 
     duplicates = event.find_exact_duplicates
     event = duplicates.first.progenitor if duplicates
@@ -548,7 +596,7 @@ EOF
     # Add the calendar name, normalize line-endings to UNIX LF, then replace them with DOS CF-LF.
     return icalendar.
       export.
-      sub(/CALSCALE:Gregorian/, "CALSCALE:Gregorian\nX-WR-CALNAME:#{SETTINGS.name}\nMETHOD:PUBLISH").
+      sub(/(CALSCALE:\w+)/i, "\\1\nX-WR-CALNAME:#{SETTINGS.name}\nMETHOD:PUBLISH").
       gsub(/\r\n/,"\n").
       gsub(/\n/,"\r\n")
   end

@@ -105,6 +105,12 @@ describe Event do
       @event.reload
       @event.tags.first.name.should == "123"
     end
+
+    it "should return a collection of events for a given tag" do
+      @event.tag_list = @tags
+      @event.save
+      Event.tagged_with('tags').should == [@event]
+    end
   end
 
   describe "when parsing" do
@@ -843,5 +849,50 @@ describe Event do
         # ical.sequence.should == 42
       # end
     end
+
+    describe "- the headers" do
+      fixtures :events
+
+      before(:each) do
+        @data = Event.to_ical(events(:tomorrow))
+      end
+
+      it "should include the calendar name" do
+        @data.should =~ /\sX-WR-CALNAME:#{SETTINGS.name}\s/
+      end
+
+      it "should include the method" do
+        @data.should =~ /\sMETHOD:PUBLISH\s/
+      end
+
+      it "should include the scale" do
+        @data.should =~ /\sCALSCALE:Gregorian\s/i
+      end
+    end
+
   end
+
+  describe "sorting labels" do
+    it "should have sorting labels" do
+      Event::SORTING_LABELS.should be_a_kind_of(Hash)
+    end
+
+    it "should display human-friendly label for a known value" do
+      Event::sorting_label_for('name').should == 'Event Name'
+    end
+
+    it "should display raw label for unknown value" do
+      # TODO Should we only show labels for known keys?
+      Event::sorting_label_for('kitten').should == 'kitten'
+    end
+
+    it "should display a default label" do
+      Event::sorting_label_for(nil).should == 'Relevance'
+    end
+
+    it "should display a different default label when searching by tag" do
+      Event::sorting_label_for(nil, true).should == 'Date'
+    end
+  end
+
 end

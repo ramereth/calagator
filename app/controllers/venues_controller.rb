@@ -4,15 +4,23 @@ class VenuesController < ApplicationController
   # GET /venues
   # GET /venues.xml
   def index
-    params[:val] ||= ""
-    @venues = Venue.find(:non_duplicates, :conditions => ["title LIKE ?", "%#{params[:val]}%"], :order => 'lower(title)')
+    @tag = nil
+    if params[:tag].present?
+      @tag = params[:tag]
+      @venues = Venue.tagged_with(@tag)
+    elsif params[:val].present?
+      @venues = Venue.find(:non_duplicates, :order => 'lower(title)', :conditions => ["title LIKE ?", "%#{params[:val]}%"])
+    else
+      @venues = Venue.find(:non_duplicates, :order => 'lower(title)')
+    end
+
     @page_title = "Venues"
 
     respond_to do |format|
       format.html # index.html.erb
       format.xml  { render :xml => @venues }
       format.json { render :json => @venues, :callback => params[:callback] }
-      format.js  { render :json => @venues, :callback => params[:callback] }
+      format.js   { render :json => @venues, :callback => params[:callback] }
       format.kml  # index.kml.erb
     end
   end

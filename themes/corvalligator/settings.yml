@@ -20,3 +20,8 @@ venues_google_map_options:
   zoom: 12
   # Center of the map, in latitude and longitude:
   center: [44.570191, -123.275127]
+
+# Array of tag names to exclude from tag cloud:
+#tagcloud_exclusions:
+#  - ostartupskey
+#  - tvg

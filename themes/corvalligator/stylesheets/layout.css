@@ -423,7 +423,6 @@ fieldset .help {
   padding: 1em;
   width: 200px;
   margin: 0 2em 0 -1em;
-  float: left;
 }
 
 #project_description a {
@@ -433,6 +432,22 @@ fieldset .help {
 #project_description h2 {
   font-weight: bold;
   margin-bottom: .5em;
+}
+
+#tagcloud {
+  background: transparent url('/themes/corvalligator/images/white.png') repeat;
+  padding: 1em;
+  width: 200px;
+  margin: 0 2em 0 -1em;
+}
+
+#tagcloud h2 {
+  font-weight: bold;
+  margin-bottom: .5em;
+}
+
+#homepage_sidebar {
+  float: left;
 }
 
 
@@ -487,5 +502,6 @@ table.changeset td.field_name {
 .changeset .removed {
   color: red;
 }
+
 
 /* @end */
